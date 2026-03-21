@@ -36,3 +36,4 @@ target_compile_options(llb_core INTERFACE
 # add_subdirectory(apps)
 # add_subdirectory(tests)
 # add_subdirectory(benchmarks)
+add_executable(LowLatencyBuffer main.cpp)
