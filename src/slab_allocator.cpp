@@ -38,10 +38,8 @@ Order* SlabAllocator::allocate() {
 }
 
 void SlabAllocator::deallocate(Order* ptr) {
-    if (!ptr) {
-        return;
-    }
-    ptr->~Order();
+    if (!ptr) return;
+    ptr->~Order(); 
     free_list.push_back(ptr);
 }
 
