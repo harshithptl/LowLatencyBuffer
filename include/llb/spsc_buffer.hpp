@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstdlib>  
 #include <stdexcept> 
-#include <new>
 
 namespace llb {
 
@@ -32,7 +31,7 @@ public:
         const size_t current_write = write_idx.load(std::memory_order_relaxed);
         const size_t next_write = (current_write + 1) & mask;
 
-        if (next_write == read_idx_shadow) [[unlikely]] {
+        if (next_write == read_idx_shadow) {
             read_idx_shadow = read_idx.load(std::memory_order_acquire);
             if (next_write == read_idx_shadow) return false;
         }
@@ -45,7 +44,7 @@ public:
     bool try_pop(T& item) {
         const size_t current_read = read_idx.load(std::memory_order_relaxed);
 
-        if (current_read == write_idx_shadow) [[unlikely]] {
+        if (current_read == write_idx_shadow) {
             write_idx_shadow = write_idx.load(std::memory_order_acquire);
             if (current_read == write_idx_shadow) return false;
         }
