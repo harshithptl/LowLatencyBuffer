@@ -17,7 +17,7 @@ public:
     Order* create_order(Args&&... args) {
         Order* ptr = allocate();
         if (!ptr) return nullptr;
-        return new (ptr) Order{std::forward<Args>(args)...};
+        return new (ptr) Order(std::forward<Args>(args)...);
     }
 
 private:
