@@ -1,6 +1,8 @@
 #pragma once
-#include <vector>
+#include <cstddef>
 #include <cstdlib>
+#include <new>
+#include <utility>
 #include "order.hpp"
 
 namespace llb {
@@ -21,10 +23,8 @@ public:
     }
 
 private:
-    size_t total_orders;
     Order* memory_block = nullptr;
-    std::vector<Order*> free_list;
-
+    Order* free_head = nullptr;
 };
 
-} 
+}

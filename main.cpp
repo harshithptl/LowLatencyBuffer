@@ -28,12 +28,12 @@ void pin_thread_to_core(int tag) {
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     thread_affinity_policy_data_t policy = { tag };
     thread_port_t mach_thread = pthread_mach_thread_np(pthread_self());
-    thread_policy_set(mach_thread, THREAD_AFFINITY_POLICY, 
+    thread_policy_set(mach_thread, THREAD_AFFINITY_POLICY,
                       (thread_policy_t)&policy, THREAD_AFFINITY_POLICY_COUNT);
 }
 
 int main() {
-    const size_t ring_capacity = 1024; 
+    const size_t ring_capacity = 1024;
     const size_t warm_up = 100'000;
     const size_t iters = 1'000'000;
     
@@ -47,27 +47,31 @@ int main() {
     
     std::atomic<bool> start_measuring{false};
     std::atomic<bool> producer_done{false};
+    size_t dropped_samples = 0;
 
     // --- CONSUMER ---
     std::thread consumer([&]() {
         pin_thread_to_core(1);
         llb::Order* ord = nullptr;
-        
+
         while (true) {
             if (work_ring.try_pop(ord)) {
                 if (start_measuring.load(std::memory_order_relaxed)) {
-                    latencies.push_back((double)(get_tsc() - ord->start_tsc) * NS_PER_TICK);
+                    const uint64_t now = get_tsc();
+                    // Guard against rare TSC skew on thread migration.
+                    if (now >= ord->start_tsc) {
+                        latencies.push_back((double)(now - ord->start_tsc) * NS_PER_TICK);
+                    } else {
+                        ++dropped_samples;
+                    }
                 }
-                
-                // NON-BLOCKING RECYCLE: If recycle_ring is full, 
-                // we spin a little but don't hang the whole system.
+
+                // NON-BLOCKING RECYCLE: spin a little but don't hang.
                 size_t retry = 0;
                 while (!recycle_ring.try_push(ord)) {
                     cpu_relax();
                     if (++retry > 1000) {
-                        // High-pressure safety: if we can't recycle, 
-                        // something is wrong with the producer's drain.
-                        std::this_thread::yield(); 
+                        std::this_thread::yield();
                         retry = 0;
                     }
                 }
@@ -107,10 +111,8 @@ int main() {
             // 2. Push with "Active Draining"
             ord->start_tsc = get_tsc();
             while (!work_ring.try_push(ord)) {
-                // While waiting for the work_ring to have space, 
-                // the producer MUST keep draining the recycle_ring.
-                // This prevents the "Double-Full" Deadlock.
-                drain_recycle(); 
+                // Active drain to prevent the Double-Full deadlock.
+                drain_recycle();
                 cpu_relax();
             }
 
@@ -124,12 +126,14 @@ int main() {
     consumer.join();
     
     std::sort(latencies.begin(), latencies.end());
-    double sum = std::accumulate(latencies.begin(), latencies.end(), 0.0);
+    const double sum = std::accumulate(latencies.begin(), latencies.end(), 0.0);
+    const size_t n = latencies.size();
 
     std::cout << "\n--- HARDWARE-CORRECTED SLAB REPORT (NS) ---" << std::endl;
-    std::cout << "Mean : " << sum / iters << " ns" << std::endl;
-    std::cout << "P50  : " << latencies[iters * 0.5] << " ns" << std::endl;
-    std::cout << "P99  : " << latencies[iters * 0.99] << " ns" << std::endl;
+    std::cout << "Samples : " << n << " (dropped " << dropped_samples << " on TSC skew)" << std::endl;
+    std::cout << "Mean : " << sum / n << " ns" << std::endl;
+    std::cout << "P50  : " << latencies[n * 0.5] << " ns" << std::endl;
+    std::cout << "P99  : " << latencies[n * 0.99] << " ns" << std::endl;
     std::cout << "Max  : " << latencies.back() << " ns" << std::endl;
 
     return 0;
