@@ -37,7 +37,7 @@ find_package(Threads REQUIRED)
 
 # --- 5. Executables ---
 # We create the benchmark app and link it to our core library
-add_executable(LowLatencyBuffer main.cpp src/slab_allocator.cpp)
+add_executable(LowLatencyBuffer main.cpp src/slab_allocator.cpp src/order_book.cpp)
 
 # Linking llb_core gives main.cpp access to the include/ folder and the O3 flags
 target_link_libraries(LowLatencyBuffer PRIVATE llb_core Threads::Threads)
